@@ -16,8 +16,8 @@ inputs:
     required: true
   api-key:
     description: >-
-      Attestation API key (sg_k_…). Pass this as a GitHub secret
-      (${{ secrets.SG_API_KEY }}), never a literal value.
+      Attestation API key (sg_k_…). Pass this via a GitHub Actions secret
+      (e.g. secrets.SG_API_KEY in the calling workflow), never a literal value.
     required: true
   title:
     description: "Declared title bound to the attestation's signature (optional)."
