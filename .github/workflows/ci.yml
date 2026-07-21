@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # Runs on every push/PR: read-only checks only (no credential, no quota
+  # spent) — a canary that the pinned CLI still starts and behaves as this
+  # action expects it to, before anyone merges a change to action.yml.
+  smoke-readonly:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: sg-attest --version / --help
+        run: |
+          npx -y -p @spazio-genesi/attest-mcp@0.3.0 sg-attest --version
+          npx -y -p @spazio-genesi/attest-mcp@0.3.0 sg-attest --help
+
+      - name: sg-attest status (read-only, no credential)
+        run: npx -y -p @spazio-genesi/attest-mcp@0.3.0 sg-attest status --json
+
+      - name: sg-attest verify on a fixture (read-only, no credential)
+        run: npx -y -p @spazio-genesi/attest-mcp@0.3.0 sg-attest verify test/fixtures/sample.txt --json
+
+  # Only on a manual run: ONE real attestation through the local action
+  # (uses: ./), spending one unit of quota — never on every push (see README
+  # "Cost of running this"). The operator sets the SG_API_KEY secret (F3).
+  self-test-attest:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Attest the fixture for real
+        id: attest
+        uses: ./
+        with:
+          files: test/fixtures/sample.txt
+          api-key: ${{ secrets.SG_API_KEY }}
+          title: "attest-action self-test"
+          note: "Automated self-test run, safe to ignore — ${{ github.repository }}#${{ github.run_id }}"
+
+      - name: Check outputs are non-empty
+        run: |
+          test -n "${{ steps.attest.outputs.sha256 }}"
+          test -n "${{ steps.attest.outputs.certificate-url }}"
+          echo "Attested: ${{ steps.attest.outputs.certificate-url }}"

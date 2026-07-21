@@ -1,0 +1,128 @@
+name: "Attest build artifacts"
+description: >-
+  Attest one or more build artifacts with Spazio Genesi's free proof-of-existence
+  service (SHA-256 fingerprint, timestamped, signed) using the sg-attest CLI. The
+  artifact never leaves the runner — only its fingerprint is sent.
+author: "Spazio Genesi ETS"
+branding:
+  icon: "shield"
+  color: "yellow"
+
+inputs:
+  files:
+    description: >-
+      One or more artifact paths/globs, whitespace- or newline-separated
+      (e.g. "dist/*.zip" or a literal path).
+    required: true
+  api-key:
+    description: >-
+      Attestation API key (sg_k_…). Pass this as a GitHub secret
+      (${{ secrets.SG_API_KEY }}), never a literal value.
+    required: true
+  title:
+    description: "Declared title bound to the attestation's signature (optional)."
+    required: false
+    default: ""
+  author:
+    description: "Declared author bound to the attestation's signature (optional)."
+    required: false
+    default: ""
+  year:
+    description: "Declared year/version bound to the attestation's signature (optional)."
+    required: false
+    default: ""
+  note:
+    description: "Declared free-text note bound to the attestation's signature (optional)."
+    required: false
+    default: ""
+  download-pdf:
+    description: "Also mint and keep the signed certificate PDF next to each artifact."
+    required: false
+    default: "false"
+  cli-version:
+    description: >-
+      Pinned version of @spazio-genesi/attest-mcp to run the CLI from. Never
+      "latest" — a floating version could change behavior under you between runs.
+    required: false
+    default: "0.3.0"
+
+outputs:
+  sha256:
+    description: "SHA-256 fingerprint of the last attested file."
+    value: ${{ steps.attest.outputs.sha256 }}
+  certificate-url:
+    description: "Permanent verification URL (/c/<hash>) of the last attested file."
+    value: ${{ steps.attest.outputs.certificate-url }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+
+    - name: Attest files
+      id: attest
+      shell: bash
+      env:
+        IMGAUTH_API_KEY: ${{ inputs.api-key }}
+        SG_FILES: ${{ inputs.files }}
+        SG_TITLE: ${{ inputs.title }}
+        SG_AUTHOR: ${{ inputs.author }}
+        SG_YEAR: ${{ inputs.year }}
+        SG_NOTE: ${{ inputs.note }}
+        SG_DOWNLOAD_PDF: ${{ inputs.download-pdf }}
+        SG_CLI_VERSION: ${{ inputs.cli-version }}
+      run: |
+        set -euo pipefail
+
+        declare -a extra_flags=()
+        [ -n "${SG_TITLE}" ]  && extra_flags+=(--title "${SG_TITLE}")
+        [ -n "${SG_AUTHOR}" ] && extra_flags+=(--author "${SG_AUTHOR}")
+        [ -n "${SG_YEAR}" ]   && extra_flags+=(--year "${SG_YEAR}")
+        [ -n "${SG_NOTE}" ]   && extra_flags+=(--note "${SG_NOTE}")
+
+        echo "### Attestazione — Spazio Genesi" >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+        echo "| File | SHA-256 | Verifica |" >> "$GITHUB_STEP_SUMMARY"
+        echo "|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+
+        last_sha256=""
+        last_url=""
+        count=0
+
+        # Word-split + glob-expand SG_FILES (space/newline separated patterns) —
+        # deliberately unquoted, same convention documented in the README.
+        for pattern in ${SG_FILES}; do
+          for f in $pattern; do
+            [ -e "$f" ] || { echo "::error::No match for pattern/path: $pattern" >&2; exit 1; }
+            count=$((count + 1))
+
+            pdf_flag=()
+            if [ "${SG_DOWNLOAD_PDF}" = "true" ]; then
+              pdf_flag=(--pdf "${f}.certificato.pdf")
+            fi
+
+            echo "::group::sg-attest attest $f"
+            result="$(npx -y -p "@spazio-genesi/attest-mcp@${SG_CLI_VERSION}" sg-attest attest "$f" "${extra_flags[@]}" "${pdf_flag[@]}" --json)"
+            echo "$result"
+            echo "::endgroup::"
+
+            sha256="$(node -e "console.log(JSON.parse(process.argv[1]).sha256)" "$result")"
+            url="$(node -e "console.log(JSON.parse(process.argv[1]).permanent_url)" "$result")"
+
+            echo "| \`$f\` | \`$sha256\` | [$sha256]($url) |" >> "$GITHUB_STEP_SUMMARY"
+
+            last_sha256="$sha256"
+            last_url="$url"
+          done
+        done
+
+        if [ "$count" -eq 0 ]; then
+          echo "::error::No files matched 'files: ${SG_FILES}'" >&2
+          exit 1
+        fi
+
+        echo "sha256=${last_sha256}" >> "$GITHUB_OUTPUT"
+        echo "certificate-url=${last_url}" >> "$GITHUB_OUTPUT"

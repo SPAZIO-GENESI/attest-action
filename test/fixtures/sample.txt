@@ -1,0 +1,3 @@
+attest-action fixture — used only for read-only smoke checks (verify/status),
+never attested for real. Its content is irrelevant; its hash is not registered
+anywhere.
