@@ -9,6 +9,11 @@ jobs:
   # Runs on every push/PR: read-only checks only (no credential, no quota
   # spent) — a canary that the pinned CLI still starts and behaves as this
   # action expects it to, before anyone merges a change to action.yml.
+  #
+  # ⚠️ Every step must assert on the CLI's OUTPUT, never on its exit code
+  # alone. The first version of this job only ran the commands, and went
+  # green against a 0.3.0 CLI that exited 0 while printing nothing at all
+  # (broken bin entry point) — a blind canary is worse than none.
   smoke-readonly:
     runs-on: ubuntu-latest
     steps:
@@ -17,16 +22,29 @@ jobs:
         with:
           node-version: "20"
 
-      - name: sg-attest --version / --help
+      - name: sg-attest --version reports the pinned version
         run: |
-          npx -y -p @spazio-genesi/attest-mcp@0.3.0 sg-attest --version
-          npx -y -p @spazio-genesi/attest-mcp@0.3.0 sg-attest --help
+          set -euo pipefail
+          actual="$(npx -y -p @spazio-genesi/attest-mcp@0.3.1 sg-attest --version)"
+          echo "actual=${actual}"
+          test "${actual}" = "0.3.1"
+
+      - name: sg-attest --help prints usage
+        run: |
+          set -euo pipefail
+          npx -y -p @spazio-genesi/attest-mcp@0.3.1 sg-attest --help | grep -q "Uso: sg-attest"
 
       - name: sg-attest status (read-only, no credential)
-        run: npx -y -p @spazio-genesi/attest-mcp@0.3.0 sg-attest status --json
+        run: |
+          set -euo pipefail
+          npx -y -p @spazio-genesi/attest-mcp@0.3.1 sg-attest status --json \
+            | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{const s=JSON.parse(d);if(!s.worker)throw new Error('no worker field');console.log('worker:',s.worker);});"
 
       - name: sg-attest verify on a fixture (read-only, no credential)
-        run: npx -y -p @spazio-genesi/attest-mcp@0.3.0 sg-attest verify test/fixtures/sample.txt --json
+        run: |
+          set -euo pipefail
+          npx -y -p @spazio-genesi/attest-mcp@0.3.1 sg-attest verify test/fixtures/sample.txt --json \
+            | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{const v=JSON.parse(d);if(!/^[0-9a-f]{64}$/.test(v.hash_calcolato_locale||''))throw new Error('no local hash in output');console.log('hash:',v.hash_calcolato_locale);});"
 
   # Only on a manual run: ONE real attestation through the local action
   # (uses: ./), spending one unit of quota — never on every push (see README

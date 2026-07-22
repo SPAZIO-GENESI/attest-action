@@ -40,7 +40,7 @@ job's `$GITHUB_STEP_SUMMARY`, and exposes them as outputs:
 | `api-key` | yes | — | An `sg_k_…` key. Pass it as a secret, never a literal value. |
 | `title` / `author` / `year` / `note` | no | — | Declared metadata, bound to the attestation's signature. |
 | `download-pdf` | no | `false` | Also mint the signed certificate PDF (saved as `<file>.certificato.pdf`). |
-| `cli-version` | no | `0.3.0` | Pinned CLI version — never `latest` (a floating version could change behavior between runs without you noticing). |
+| `cli-version` | no | `0.3.1` | Pinned CLI version — never `latest` (a floating version could change behavior between runs without you noticing). |
 
 ## Outputs
 

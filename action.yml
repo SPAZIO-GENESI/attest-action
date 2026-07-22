@@ -44,7 +44,7 @@ inputs:
       Pinned version of @spazio-genesi/attest-mcp to run the CLI from. Never
       "latest" — a floating version could change behavior under you between runs.
     required: false
-    default: "0.3.0"
+    default: "0.3.1"
 
 outputs:
   sha256:
