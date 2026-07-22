@@ -66,6 +66,19 @@ jobs:
 
       - name: Check outputs are non-empty
         run: |
+          set -euo pipefail
           test -n "${{ steps.attest.outputs.sha256 }}"
           test -n "${{ steps.attest.outputs.certificate-url }}"
           echo "Attested: ${{ steps.attest.outputs.certificate-url }}"
+
+      # The link the action advertises must actually resolve. It only does
+      # if the certificate was minted and archived — an attestation that
+      # merely signs a fingerprint leaves /c/<hash> a 404, and this step is
+      # what stops us from shipping that link again.
+      - name: The permanent verification page resolves
+        run: |
+          set -euo pipefail
+          url="${{ steps.attest.outputs.certificate-url }}"
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --retry 3 --retry-delay 5 "$url")"
+          echo "$url -> $code"
+          test "$code" = "200"

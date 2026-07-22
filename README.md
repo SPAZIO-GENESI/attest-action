@@ -39,7 +39,7 @@ job's `$GITHUB_STEP_SUMMARY`, and exposes them as outputs:
 | `files` | yes | — | One or more paths/globs, whitespace- or newline-separated. |
 | `api-key` | yes | — | An `sg_k_…` key. Pass it as a secret, never a literal value. |
 | `title` / `author` / `year` / `note` | no | — | Declared metadata, bound to the attestation's signature. |
-| `download-pdf` | no | `false` | Also mint the signed certificate PDF (saved as `<file>.certificato.pdf`). |
+| `download-pdf` | no | `false` | Keep the signed certificate PDF on the runner as `<file>.certificato.pdf`. The certificate is always minted regardless (see below); this only decides whether the file is left behind. |
 | `cli-version` | no | `0.3.1` | Pinned CLI version — never `latest` (a floating version could change behavior between runs without you noticing). |
 
 ## Outputs
@@ -51,6 +51,18 @@ job's `$GITHUB_STEP_SUMMARY`, and exposes them as outputs:
 
 With multiple `files`, every file is attested and listed in the step
 summary; the outputs reflect only the last one processed.
+
+## What survives the job
+
+Each attested file gets a signed certificate minted and archived server-side,
+which is what anchors it in Bitcoin (OpenTimestamps) and makes the permanent
+page `https://attestazione.spaziogenesi.org/c/<sha256>` resolve. That page,
+the archived PDF and the anchor outlive the runner and the job log — you can
+come back to them years later knowing only the fingerprint.
+
+Set `download-pdf: true` if you also want the PDF file itself on the runner
+(to attach it to a release, say). Not setting it changes nothing about what
+is archived.
 
 ## Getting an API key
 

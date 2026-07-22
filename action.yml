@@ -36,7 +36,11 @@ inputs:
     required: false
     default: ""
   download-pdf:
-    description: "Also mint and keep the signed certificate PDF next to each artifact."
+    description: >-
+      Keep the signed certificate PDF on the runner, as <file>.certificato.pdf.
+      The certificate is always minted either way (that is what archives the
+      attestation and anchors it in Bitcoin); this only decides whether the
+      file is also left behind for you to upload as a build artifact.
     required: false
     default: "false"
   cli-version:
@@ -99,15 +103,24 @@ runs:
             [ -e "$f" ] || { echo "::error::No match for pattern/path: $pattern" >&2; exit 1; }
             count=$((count + 1))
 
-            pdf_flag=()
+            # Always mint the certificate. `attest` alone only signs the
+            # fingerprint: nothing is archived, no OpenTimestamps proof is
+            # created, and the permanent /c/<hash> page stays a 404 — the run
+            # would advertise a verification link that leads nowhere. Minting
+            # is what makes a CI attestation outlive the job log. Whether the
+            # PDF is *kept* on the runner is the caller's choice.
             if [ "${SG_DOWNLOAD_PDF}" = "true" ]; then
-              pdf_flag=(--pdf "${f}.certificato.pdf")
+              pdf_path="${f}.certificato.pdf"
+            else
+              pdf_path="$(mktemp "${RUNNER_TEMP:-/tmp}/sg-cert-XXXXXX")"
             fi
 
             echo "::group::sg-attest attest $f"
-            result="$(npx -y -p "@spazio-genesi/attest-mcp@${SG_CLI_VERSION}" sg-attest attest "$f" "${extra_flags[@]}" "${pdf_flag[@]}" --json)"
+            result="$(npx -y -p "@spazio-genesi/attest-mcp@${SG_CLI_VERSION}" sg-attest attest "$f" "${extra_flags[@]}" --pdf "$pdf_path" --json)"
             echo "$result"
             echo "::endgroup::"
+
+            [ "${SG_DOWNLOAD_PDF}" = "true" ] || rm -f "$pdf_path"
 
             sha256="$(node -e "console.log(JSON.parse(process.argv[1]).sha256)" "$result")"
             url="$(node -e "console.log(JSON.parse(process.argv[1]).permanent_url)" "$result")"
